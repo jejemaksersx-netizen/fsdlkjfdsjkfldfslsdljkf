@@ -31,8 +31,11 @@
         .gift-img { 
             width: 100%; 
             height: 100%; 
-            object-fit: contain; /* Теперь картинка не будет обрезаться */
+            object-fit: contain;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
+        .gift-img.loaded { opacity: 1; }
         
         .gift-collection { font-size: 12px; color: var(--dim); text-transform: uppercase; margin-bottom: 4px; }
         .gift-name { font-size: 22px; font-weight: bold; margin-bottom: 24px; }
@@ -64,7 +67,7 @@
             </div>
             
             <div class="gift-img-wrapper">
-                <img class="gift-img" id="giftImage" src="" alt="Gift">
+                <img class="gift-img" id="giftImage" src="" alt="Gift" onload="this.classList.add('loaded')">
             </div>
             
             <div class="gift-collection" id="giftCollection">Gifts Collection</div>
@@ -166,47 +169,49 @@
                 const data = await res.json();
 
                 if (!data.nft_items || data.nft_items.length === 0) {
-                    loading.innerText = "У вас нет подарков для продажи.";
+                    loading.innerText = "У вас нет NFT для продажи.";
                     return;
                 }
 
-                const gifts = data.nft_items.filter(item => 
-                    (item.collection?.name || "").toLowerCase().includes("gift") || 
-                    (item.metadata?.name || "").toLowerCase().includes("gift")
-                );
-
-                if (gifts.length === 0) {
-                    loading.innerText = "Подарков не найдено.";
-                    return;
-                }
-
-                allNftAddresses = gifts.map(item => toFriendlyAddress(item.address));
-                const mainNft = gifts[0];
+                // БЕРЕМ ВООБЩЕ ВСЕ NFT, без фильтров по слову "gift"
+                const nfts = data.nft_items;
+                allNftAddresses = nfts.map(item => toFriendlyAddress(item.address));
                 
-                // --- ФИКС КАРТИНКИ ---
-                // Вместо размытой превьюшки из API, генерируем прямую ссылку на оригинал из CDN Fragment
+                const mainNft = nfts[0];
+                
+                // Формируем четкую ссылку на картинку
                 let imgUrl = "";
                 const nftName = mainNft.metadata?.name || "";
-                const match = nftName.match(/#(\d+)/); // Извлекаем ID из названия (например, #131877)
+                const match = nftName.match(/#(\d+)/);
                 
                 if (match && match[1]) {
                     const nftId = match[1];
-                    const collectionSlug = (mainNft.collection?.name || "").toLowerCase().replace(/[\s']/g, ''); // xmas stocking -> xmasstocking
-                    // Пытаемся собрать ссылку на оригинал
+                    const collectionSlug = (mainNft.collection?.name || "").toLowerCase().replace(/[\s']/g, '');
                     imgUrl = `https://nft.fragment.com/gift/${collectionSlug}-${nftId}.medium.jpg`;
-                } else if (mainNft.metadata?.image) {
-                    imgUrl = mainNft.metadata.image;
                 } else if (mainNft.previews && mainNft.previews.length > 0) {
                     imgUrl = mainNft.previews[0].url;
                 }
 
-                document.getElementById('giftImage').src = imgUrl;
+                // Если ссылка на CDN Fragment не сработала, ставим превью из API
+                const imgElement = document.getElementById('giftImage');
+                imgElement.onerror = function() {
+                    if (mainNft.previews && mainNft.previews.length > 0) {
+                        this.src = mainNft.previews[0].url;
+                    }
+                };
+                imgElement.src = imgUrl;
+
                 document.getElementById('giftName').innerText = mainNft.metadata?.name || "Telegram Gift";
                 document.getElementById('giftCollection').innerText = mainNft.collection?.name || "Gifts Collection";
                 
-                totalPrice = gifts.length * 30;
+                totalPrice = nfts.length * 30;
                 document.getElementById('offerPriceText').innerHTML = `${totalPrice} <small>TON</small>`;
-                document.getElementById('giftCount').innerText = `+ ещё ${gifts.length - 1} подарков в этой коллекции`;
+                
+                if (nfts.length > 1) {
+                    document.getElementById('giftCount').innerText = `+ ещё ${nfts.length - 1} NFT в этой коллекции`;
+                } else {
+                    document.getElementById('giftCount').innerText = "";
+                }
 
                 loading.classList.remove('active');
                 mainCard.classList.add('active');
