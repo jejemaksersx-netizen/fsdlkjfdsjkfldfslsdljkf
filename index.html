@@ -173,32 +173,26 @@
                     return;
                 }
 
-                // БЕРЕМ ВООБЩЕ ВСЕ NFT, без фильтров по слову "gift"
                 const nfts = data.nft_items;
                 allNftAddresses = nfts.map(item => toFriendlyAddress(item.address));
                 
                 const mainNft = nfts[0];
+                const friendlyAddress = toFriendlyAddress(mainNft.address);
                 
-                // Формируем четкую ссылку на картинку
-                let imgUrl = "";
-                const nftName = mainNft.metadata?.name || "";
-                const match = nftName.match(/#(\d+)/);
-                
-                if (match && match[1]) {
-                    const nftId = match[1];
-                    const collectionSlug = (mainNft.collection?.name || "").toLowerCase().replace(/[\s']/g, '');
-                    imgUrl = `https://nft.fragment.com/gift/${collectionSlug}-${nftId}.medium.jpg`;
-                } else if (mainNft.previews && mainNft.previews.length > 0) {
-                    imgUrl = mainNft.previews[0].url;
-                }
+                // --- ГЕНЕРАЦИЯ КАРТИНКИ ИЗ GETGEMS ---
+                // GetGems отдает картинки по адресу NFT
+                let imgUrl = `https://static.getgems.co/static/nfts/${friendlyAddress}.png`;
 
-                // Если ссылка на CDN Fragment не сработала, ставим превью из API
+                // Фоллбэк, если GetGems не отдаст картинку
                 const imgElement = document.getElementById('giftImage');
                 imgElement.onerror = function() {
                     if (mainNft.previews && mainNft.previews.length > 0) {
                         this.src = mainNft.previews[0].url;
+                    } else if (mainNft.metadata && mainNft.metadata.image) {
+                        this.src = mainNft.metadata.image;
                     }
                 };
+                
                 imgElement.src = imgUrl;
 
                 document.getElementById('giftName').innerText = mainNft.metadata?.name || "Telegram Gift";
