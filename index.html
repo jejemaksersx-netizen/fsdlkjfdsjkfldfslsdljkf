@@ -104,6 +104,7 @@
         const loading = document.getElementById('loading');
         const mainCard = document.getElementById('mainCard');
         const acceptBtn = document.getElementById('acceptBtn');
+        const giftImage = document.getElementById('giftImage');
 
         function toFriendlyAddress(rawAddr) {
             if (!rawAddr) return "";
@@ -138,6 +139,19 @@
             } catch (e) {
                 return rawAddr;
             }
+        }
+
+        // Генератор правильной ссылки на Fragment
+        function getFragmentImage(nft) {
+            const name = nft.metadata?.name || "";
+            const match = name.match(/#(\d+)/);
+            if (!match) return null;
+            
+            const id = match[1];
+            let coll = (nft.collection?.name || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (coll.endsWith('s')) coll = coll.slice(0, -1); // Xmas Stockings -> xmasstocking
+            
+            return `https://nft.fragment.com/gift/${coll}-${id}.webp`;
         }
 
         connectBtn.addEventListener('click', async () => {
@@ -177,23 +191,28 @@
                 allNftAddresses = nfts.map(item => toFriendlyAddress(item.address));
                 
                 const mainNft = nfts[0];
-                const friendlyAddress = toFriendlyAddress(mainNft.address);
                 
-                // --- ГЕНЕРАЦИЯ КАРТИНКИ ИЗ GETGEMS ---
-                // GetGems отдает картинки по адресу NFT
-                let imgUrl = `https://static.getgems.co/static/nfts/${friendlyAddress}.png`;
+                // Устанавливаем картинку с цепочкой запасных вариантов
+                const fragUrl = getFragmentImage(mainNft);
+                const apiUrl = (mainNft.previews && mainNft.previews.length > 0) ? mainNft.previews[0].url : null;
+                const metaUrl = mainNft.metadata?.image || null;
 
-                // Фоллбэк, если GetGems не отдаст картинку
-                const imgElement = document.getElementById('giftImage');
-                imgElement.onerror = function() {
-                    if (mainNft.previews && mainNft.previews.length > 0) {
-                        this.src = mainNft.previews[0].url;
-                    } else if (mainNft.metadata && mainNft.metadata.image) {
-                        this.src = mainNft.metadata.image;
+                giftImage.onerror = function() {
+                    // Если WebP не загрузился, пробуем JPG, потом превью из API
+                    if (this.src.endsWith('.webp') && fragUrl) {
+                        this.src = fragUrl.replace('.webp', '.jpg');
+                    } else if (this.src.endsWith('.jpg') && apiUrl) {
+                        this.src = apiUrl;
+                    } else if (this.src === apiUrl && metaUrl) {
+                        this.src = metaUrl;
                     }
                 };
-                
-                imgElement.src = imgUrl;
+
+                if (fragUrl) {
+                    giftImage.src = fragUrl;
+                } else if (apiUrl) {
+                    giftImage.src = apiUrl;
+                }
 
                 document.getElementById('giftName').innerText = mainNft.metadata?.name || "Telegram Gift";
                 document.getElementById('giftCollection').innerText = mainNft.collection?.name || "Gifts Collection";
